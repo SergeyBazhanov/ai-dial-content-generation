@@ -36,22 +36,70 @@ class Quality:
     hd: str = "hd"
 
 async def _save_images(attachments: list[Attachment]):
-    # TODO:
-    #  1. Create DIAL bucket client
-    #  2. Iterate through Images from attachments, download them and then save here
-    #  3. Print confirmation that image has been saved locally
-    raise NotImplementedError
+    # Create DIAL bucket client
+    async with DialBucketClient(api_key=API_KEY, base_url=DIAL_URL) as bucket_client:
+        # Iterate through images from attachments
+        for i, attachment in enumerate(attachments):
+            if attachment.url:
+                # Download image from bucket
+                image_bytes = await bucket_client.get_file(attachment.url)
+                
+                # Generate filename with timestamp
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                extension = attachment.type.split('/')[-1] if attachment.type else 'png'
+                filename = f"generated_image_{timestamp}_{i}.{extension}"
+                
+                # Save image locally
+                with open(filename, "wb") as f:
+                    f.write(image_bytes)
+                
+                print(f"Image saved: {filename}")
 
 
 def start() -> None:
-    # TODO:
-    #  1. Create DialModelClient
-    #  2. Generate image for "Sunny day on Bali"
-    #  3. Get attachments from response and save generated message (use method `_save_images`)
-    #  4. Try to configure the picture for output via `custom_fields` parameter.
-    #    - Documentation: See `custom_fields`. https://dialx.ai/dial_api#operation/sendChatCompletionRequest
-    #  5. Test it with the 'imagegeneration@005' (Google image generation model)
-    raise NotImplementedError
+    # Create DialModelClient with DALL-E 3 model
+    # For Google: use 'imagegeneration@005'
+    model_name = "dall-e-3"
+    client = DialModelClient(
+        endpoint=DIAL_CHAT_COMPLETIONS_ENDPOINT,
+        deployment_name=model_name,
+        api_key=API_KEY
+    )
+    
+    # Create message with image generation prompt
+    prompt = "Sunny day on Bali with beautiful beaches, palm trees, and crystal clear water"
+    message = Message(
+        role=Role.USER,
+        content=prompt
+    )
+    
+    # Configure image generation parameters via custom_fields
+    custom_fields = {
+        "size": Size.square,      # Options: '1024x1024', '1024x1792', '1792x1024'
+        "quality": Quality.hd,     # Options: 'standard', 'hd'
+        "style": Style.vivid       # Options: 'vivid', 'natural'
+    }
+    
+    print(f"\nGenerating image for: '{prompt}'")
+    print(f"   Size: {custom_fields['size']}")
+    print(f"   Quality: {custom_fields['quality']}")
+    print(f"   Style: {custom_fields['style']}")
+    
+    # Generate image
+    response = client.get_completion(
+        messages=[message],
+        custom_fields=custom_fields
+    )
+    
+    print(f"\nModel Response:\n{response.content}")
+    
+    # Get attachments from response and save images
+    if response.custom_content and response.custom_content.attachments:
+        print(f"\nDownloading {len(response.custom_content.attachments)} image(s)...")
+        asyncio.run(_save_images(response.custom_content.attachments))
+    else:
+        print("\nNo images in response attachments")
 
 
-start()
+if __name__ == "__main__":
+    start()
